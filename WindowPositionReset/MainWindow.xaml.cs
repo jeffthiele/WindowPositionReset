@@ -25,7 +25,7 @@ namespace WindowPositionReset
 		private const int DefaultDelay = 1;
 		private const int DefaultInterval = 5;
 		private object syncLock = new object();
-		private readonly Dictionary<Tuple<int, int, int>, Dictionary<IntPtr, WindowPlacement>> resolutionDictionary = new Dictionary<Tuple<int, int, int>, Dictionary<IntPtr, WindowPlacement>>();
+		private readonly Dictionary<Tuple<int, int, int>, Dictionary<IntPtr, Point>> resolutionDictionary = new Dictionary<Tuple<int, int, int>, Dictionary<IntPtr, Point>>();
 		private DispatcherTimer _timer = new DispatcherTimer();
 		private bool changing = false;
 		private Timer _restoreTimer = new Timer();
@@ -162,7 +162,7 @@ namespace WindowPositionReset
 					return;
 
 				Debug.WriteLine("Recording Positions");
-				var windowPositions = new Dictionary<IntPtr, WindowPlacement>();
+				var windowPositions = new Dictionary<IntPtr, Point>();
 
 				var openWindowProcesses = System.Diagnostics.Process.GetProcesses()
 					.Where(p => p.MainWindowHandle != IntPtr.Zero && p.ProcessName != "explorer");
@@ -171,10 +171,18 @@ namespace WindowPositionReset
 
 				foreach (var window in HwndObject.GetWindows())
 				{
-					Debug.WriteLine("Saving position of " + window.Hwnd + " as " + window.WindowPlacement);
 					var state = window.WindowPlacement;
+					var parent = window.GetParent();
+					if (parent.Hwnd == IntPtr.Zero && 
+						state.ShowState == WindowShowStateEnum.Normal && 
+						state.Position.Left > 0 && 
+						state.Position.Top > 0 &&
+						!string.IsNullOrEmpty(window.Title))
+					{
+						Debug.WriteLine("Saving position of " + window.Title + " as " + window.WindowPlacement);
 
-					windowPositions[window.Hwnd] = state;
+						windowPositions[window.Hwnd] = state.Position.Location;
+					}
 				}
 
 				var newConfig = GetCurrentScreenConfig();
@@ -216,7 +224,7 @@ namespace WindowPositionReset
 					if (windowPositions.ContainsKey(window.Hwnd))
 					{
 						Debug.WriteLine("Restoring position of " + window.Hwnd + " to " + windowPositions[window.Hwnd]);
-						window.WindowPlacement = windowPositions[window.Hwnd];
+						window.Location = windowPositions[window.Hwnd];
 					}
 				}
 			}

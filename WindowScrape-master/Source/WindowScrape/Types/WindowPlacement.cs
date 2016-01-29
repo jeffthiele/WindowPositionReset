@@ -17,10 +17,8 @@ namespace WindowPositionReset
 	{
 		Hide = 0,
 		Normal = 1,
-		ShowNormal = 1,
-		ShowMinimized = 2,
+		Minimized = 2,
 		Maximize = 3,
-		ShowMaximized = 3,
 		ShowNoActive = 4,
 		Show = 5,
 		Minimize = 6,
