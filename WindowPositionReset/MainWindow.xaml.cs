@@ -32,6 +32,8 @@ namespace WindowPositionReset
 		private NotifyIcon mynotifyicon = new NotifyIcon();
 		private bool workstationLocked;
 
+		public SystemState CurrentState = new SystemState();
+
 		public MainWindow()
 		{
 			int delay;
@@ -92,12 +94,18 @@ namespace WindowPositionReset
 			if (args.Reason == SessionSwitchReason.SessionLock)
 			{
 				Debug.WriteLine("Station Locked");
+				CurrentState.SystemLocked = true;
 				workstationLocked = true;
 			}
 			else if (args.Reason == SessionSwitchReason.SessionUnlock)
 			{
 				Debug.WriteLine("Station Unlocked");
+				CurrentState.SystemLocked = false;
 				workstationLocked = false;
+				if (CurrentState.ChangeDetected)
+				{
+					_restoreTimer.Start();
+				}
 			}
 		}
 
@@ -132,9 +140,11 @@ namespace WindowPositionReset
 		{
 			Debug.WriteLine("Display Settings Changed");
 
+			CurrentState.ChangeDetected = true;
+
 			var newTuple = GetCurrentScreenConfig();
 
-			if (resolutionDictionary.ContainsKey(newTuple) && !workstationLocked)
+			if (resolutionDictionary.ContainsKey(newTuple))
 			{
 				_restoreTimer.Start();
 			}
@@ -158,7 +168,7 @@ namespace WindowPositionReset
 		{
 			lock (syncLock)
 			{
-				if (changing || workstationLocked)
+				if (changing || workstationLocked || CurrentState.SystemLocked || CurrentState.ChangeDetected)
 					return;
 
 				Debug.WriteLine("Recording Positions");
@@ -199,6 +209,12 @@ namespace WindowPositionReset
 		{
 			Debug.WriteLine("Restoring Positions");
 
+			lock (syncLock)
+			{
+				if (workstationLocked)
+					return;
+			}
+
 			mynotifyicon.BalloonTipText = "Restoring Window Positions";
 			mynotifyicon.ShowBalloonTip(500);
 			await Task.Run(() => RestorePositions());
@@ -209,23 +225,32 @@ namespace WindowPositionReset
 		{
 			lock (syncLock)
 			{
-				var openWindowProcesses = System.Diagnostics.Process.GetProcesses()
-					.Where(p => p.MainWindowHandle != IntPtr.Zero && p.ProcessName != "explorer").ToArray();
-
-				var currentConfig = GetCurrentScreenConfig();
-
-				if (!resolutionDictionary.ContainsKey(currentConfig))
-					return;
-
-				var windowPositions = resolutionDictionary[currentConfig];
-
-				foreach (var window in HwndObject.GetWindows())
+				if (!workstationLocked)
 				{
-					if (windowPositions.ContainsKey(window.Hwnd))
+					var openWindowProcesses = System.Diagnostics.Process.GetProcesses()
+						.Where(p => p.MainWindowHandle != IntPtr.Zero && p.ProcessName != "explorer").ToArray();
+
+					var currentConfig = GetCurrentScreenConfig();
+
+					if (!resolutionDictionary.ContainsKey(currentConfig))
+						return;
+
+					var windowPositions = resolutionDictionary[currentConfig];
+
+					foreach (var window in HwndObject.GetWindows())
 					{
-						Debug.WriteLine("Restoring position of " + window.Hwnd + " to " + windowPositions[window.Hwnd]);
-						window.Location = windowPositions[window.Hwnd];
+						if (windowPositions.ContainsKey(window.Hwnd))
+						{
+							Debug.WriteLine("Restoring position of " + window.Hwnd + " to " + windowPositions[window.Hwnd]);
+							window.Location = windowPositions[window.Hwnd];
+						}
 					}
+
+					CurrentState.ChangeDetected = false;
+				}
+				else
+				{
+					_restoreTimer.Start();
 				}
 			}
 		}
