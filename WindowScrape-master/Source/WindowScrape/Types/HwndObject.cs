@@ -193,6 +193,8 @@ namespace WindowScrape.Types
                 HwndInterface.SetHwndTitle(this.Hwnd, value);
             }
         }
+
+	    public bool IsVisible => HwndInterface.GetWindowVisible(this.Hwnd);
     }
 }
 

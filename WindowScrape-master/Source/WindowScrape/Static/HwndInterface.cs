@@ -129,8 +129,17 @@ namespace WindowScrape.Static
             return lParam.ToString();
         }
 
+	    public static bool GetWindowVisible(IntPtr hwnd)
+	    {
+		    return IsWindowVisible(hwnd);
+	    }
+
         [DllImport("user32.dll", CharSet=CharSet.Auto, ExactSpelling=true)]
         private static extern IntPtr GetParent(IntPtr hWnd);
+
+	    [DllImport("user32.dll", CharSet = CharSet.Auto, ExactSpelling = true)]
+	    private static extern bool IsWindowVisible(IntPtr hWnd);
+
         [return: MarshalAs(UnmanagedType.Bool)]
         [DllImport("user32.dll")]
         private static extern bool GetWindowRect(IntPtr hWnd, out WindowScrape.Types.RECT lpRect);
