@@ -185,8 +185,6 @@ namespace WindowPositionReset
 					var parent = window.GetParent();
 					if (parent.Hwnd == IntPtr.Zero && 
 						state.ShowState == WindowShowStateEnum.Normal && 
-						state.Position.Left > 0 && 
-						state.Position.Top > 0 &&
 						!string.IsNullOrEmpty(window.Title) &&
 						window.IsVisible)
 					{
