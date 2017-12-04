@@ -25,12 +25,10 @@ namespace WindowPositionReset
 		private const int DefaultDelay = 1;
 		private const int DefaultInterval = 5;
 		private object syncLock = new object();
-		private readonly Dictionary<Tuple<int, int, int>, Dictionary<IntPtr, WindowPlacement>> resolutionDictionary = new Dictionary<Tuple<int, int, int>, Dictionary<IntPtr, WindowPlacement>>();
+		private readonly Dictionary<ScreenConfiguration, Dictionary<IntPtr, WindowPlacement>> resolutionDictionary = new Dictionary<ScreenConfiguration, Dictionary<IntPtr, WindowPlacement>>();
 		private DispatcherTimer _timer = new DispatcherTimer();
-		private bool changing = false;
 		private Timer _restoreTimer = new Timer();
 		private NotifyIcon mynotifyicon = new NotifyIcon();
-		private bool workstationLocked;
 
 		public SystemState CurrentState = new SystemState();
 
@@ -95,13 +93,11 @@ namespace WindowPositionReset
 			{
 				Debug.WriteLine("Station Locked");
 				CurrentState.SystemLocked = true;
-				workstationLocked = true;
 			}
 			else if (args.Reason == SessionSwitchReason.SessionUnlock)
 			{
 				Debug.WriteLine("Station Unlocked");
 				CurrentState.SystemLocked = false;
-				workstationLocked = false;
 				if (CurrentState.ChangeDetected)
 				{
 					_restoreTimer.Start();
@@ -115,7 +111,7 @@ namespace WindowPositionReset
 			mynotifyicon.BalloonTipText = "Monitoring window positions";
 			mynotifyicon.ShowBalloonTip(500);
 
-			this.Hide();			
+			this.Hide();
 		}
 
 		private void OnClosed(object sender, EventArgs eventArgs)
@@ -125,39 +121,29 @@ namespace WindowPositionReset
 			SystemEvents.SessionSwitch -= OnSystemEventsOnSessionSwitch;
 		}
 
+	    private void SystemEvents_DisplaySettingsChanged(object sender, EventArgs e)
+	    {
+	        CurrentState.ChangeDetected = true;
+	        Debug.WriteLine("Display Settings Changed");
+
+            _restoreTimer.Stop();
+	        _restoreTimer.Start();
+	    }
+
 		private void SystemEvents_DisplaySettingsChanging(object sender, EventArgs e)
 		{
-			changing = true;
+		    CurrentState.ChangeDetected = true;
 			Debug.WriteLine("Display Settings Changing");
 		}
 
 		private void TimerOnTick(object sender, EventArgs eventArgs)
 		{
-			Task.Run(() => RecordPositions());
+			RecordPositions();
 		}
 
-		private void SystemEvents_DisplaySettingsChanged(object sender, EventArgs e)
+		private static ScreenConfiguration GetCurrentScreenConfig()
 		{
-			Debug.WriteLine("Display Settings Changed");
-
-			CurrentState.ChangeDetected = true;
-
-			var newTuple = GetCurrentScreenConfig();
-
-			if (resolutionDictionary.ContainsKey(newTuple))
-			{
-				_restoreTimer.Start();
-			}
-			else
-			{
-				changing = false;
-			}
-		}
-
-		private static Tuple<int, int, int> GetCurrentScreenConfig()
-		{
-			var config = Tuple.Create(Screen.AllScreens.Length, Screen.AllScreens.Sum(x => x.Bounds.Width),
-				Screen.AllScreens.Sum(y => y.Bounds.Height));
+            var config = new ScreenConfiguration(Screen.AllScreens);
 
 			Debug.WriteLine("Screen config: " + config);
 
@@ -168,14 +154,11 @@ namespace WindowPositionReset
 		{
 			lock (syncLock)
 			{
-				if (changing || workstationLocked || CurrentState.SystemLocked || CurrentState.ChangeDetected)
+				if (CurrentState.SystemLocked || CurrentState.ChangeDetected)
 					return;
 
 				Debug.WriteLine("Recording Positions");
 				var windowPositions = new Dictionary<IntPtr, WindowPlacement>();
-
-				var openWindowProcesses = System.Diagnostics.Process.GetProcesses()
-					.Where(p => p.MainWindowHandle != IntPtr.Zero && p.ProcessName != "explorer");
 
 				var currentConfig = GetCurrentScreenConfig();
 
@@ -206,29 +189,35 @@ namespace WindowPositionReset
 
 		private async Task RestorePositionsAsync()
 		{
+		    var newTuple = GetCurrentScreenConfig();
+
+		    if (!resolutionDictionary.ContainsKey(newTuple))
+            {
+                Debug.WriteLine("New Resolution not found, ignoring change");
+                CurrentState.ChangeDetected = false;
+		        return;
+		    }
+
 			Debug.WriteLine("Restoring Positions");
 
 			lock (syncLock)
 			{
-				if (workstationLocked)
+				if (CurrentState.SystemLocked)
 					return;
 			}
 
 			mynotifyicon.BalloonTipText = "Restoring Window Positions";
 			mynotifyicon.ShowBalloonTip(500);
 			await Task.Run(() => RestorePositions());
-			changing = false;
+		    CurrentState.ChangeDetected = false;
 		}
 
 		private void RestorePositions()
 		{
 			lock (syncLock)
 			{
-				if (!workstationLocked)
+				if (!CurrentState.SystemLocked)
 				{
-					var openWindowProcesses = System.Diagnostics.Process.GetProcesses()
-						.Where(p => p.MainWindowHandle != IntPtr.Zero && p.ProcessName != "explorer").ToArray();
-
 					var currentConfig = GetCurrentScreenConfig();
 
 					if (!resolutionDictionary.ContainsKey(currentConfig))
