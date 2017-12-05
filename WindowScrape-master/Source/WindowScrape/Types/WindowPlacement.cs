@@ -11,6 +11,15 @@ namespace WindowPositionReset
 		{
 			return "{" + Position.ToString() + ", " + ShowState + "}";
 		}
+
+	    public WindowPlacement Clone()
+	    {
+	        return new WindowPlacement
+	        {
+	            Position = new Rectangle(this.Position.X, this.Position.Y, this.Position.Width, this.Position.Height),
+                ShowState = this.ShowState
+	        };
+	    }
 	}
 
 	public enum WindowShowStateEnum

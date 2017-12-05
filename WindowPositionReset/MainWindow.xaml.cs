@@ -167,7 +167,7 @@ namespace WindowPositionReset
 					var state = window.WindowPlacement;
 					var parent = window.GetParent();
 					if (parent.Hwnd == IntPtr.Zero && 
-						state.ShowState == WindowShowStateEnum.Normal && 
+						(state.ShowState == WindowShowStateEnum.Normal || state.ShowState == WindowShowStateEnum.Maximize) && 
 						!string.IsNullOrEmpty(window.Title) &&
 						window.IsVisible)
 					{
@@ -229,8 +229,16 @@ namespace WindowPositionReset
 					{
 						if (windowPositions.ContainsKey(window.Hwnd))
 						{
-							Debug.WriteLine("Restoring position of " + window.Hwnd + " to " + windowPositions[window.Hwnd]);
-							window.WindowPlacement = windowPositions[window.Hwnd];
+						    var newState = windowPositions[window.Hwnd];
+							Debug.WriteLine("Restoring position of " + window.Title + " to " + newState);
+
+						    var tempState = newState.Clone();
+
+						    tempState.ShowState = WindowShowStateEnum.Normal;
+						    tempState.Position = newState.Position;
+
+						    window.WindowPlacement = tempState;
+						    window.WindowPlacement = newState;
 						}
 					}
 
