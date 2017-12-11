@@ -1,8 +1,14 @@
 ﻿<Window x:Class="WindowPositionReset.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="MainWindow" Height="105" Width="233">
+        Title="MainWindow" Height="826" Width="1468">
     <Grid>
-        <TextBlock x:Name="txtLog" TextWrapping="Wrap" Text="TextBlock"/>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="245*"/>
+            <ColumnDefinition Width="138*"/>
+        </Grid.ColumnDefinitions>
+        <ScrollViewer x:Name="logViewer" HorizontalScrollBarVisibility="Auto" Grid.ColumnSpan="2">
+            <TextBlock x:Name="txtLog" Margin="23,27,90,14"/>
+        </ScrollViewer>
     </Grid>
 </Window>

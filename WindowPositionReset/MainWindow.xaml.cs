@@ -9,6 +9,9 @@ using System.Windows;
 using System.Windows.Forms;
 using System.Windows.Threading;
 using System.Drawing;
+using System.IO;
+using log4net;
+using log4net.Config;
 using Microsoft.Win32;
 using WindowScrape.Types;
 using Application = System.Windows.Forms.Application;
@@ -32,10 +35,24 @@ namespace WindowPositionReset
 
 		public SystemState CurrentState = new SystemState();
 
+	    public static ILog Logger = LogManager.GetLogger("MainWindow");
+
+	    private const int MaxLogLength = 1000000;
+
 		public MainWindow()
 		{
 			int delay;
 			int interval;
+
+		    XmlConfigurator.Configure();
+
+		    foreach (var appender in LogManager.GetRepository().GetAppenders())
+		    {
+		        if (appender is EventTriggerAppender eta)
+		        {
+		            eta.OnLogEvent += Appender_OnLogEvent;
+		        }
+		    }
 
 			InitializeComponent();
 			this.WindowState = System.Windows.WindowState.Minimized;
@@ -71,13 +88,21 @@ namespace WindowPositionReset
 
 			exitMenuItem.Click += (sender, args) =>
 			{
-				Debug.WriteLine("Clicked Exit");
+				Logger.Debug("Clicked Exit");
 				this.Close();
 			};
 
 
 			mynotifyicon.ContextMenu = new ContextMenu();
 			mynotifyicon.ContextMenu.MenuItems.Add(exitMenuItem);
+
+#if DEBUG
+		    mynotifyicon.DoubleClick += (sender, args) =>
+		    {
+		        this.WindowState = WindowState.Normal;
+                this.Show();
+		    };
+#endif
 			
 			SystemEvents.DisplaySettingsChanged += SystemEvents_DisplaySettingsChanged;
 			SystemEvents.DisplaySettingsChanging += SystemEvents_DisplaySettingsChanging;
@@ -87,16 +112,29 @@ namespace WindowPositionReset
 			this.OnStateChanged(null,null);
 		}
 
-		private void OnSystemEventsOnSessionSwitch(object sender, SessionSwitchEventArgs args)
+        private void Appender_OnLogEvent(object sender, string message)
+        {
+            txtLog.Text += message;
+            
+            if (txtLog.Text.Length > MaxLogLength)
+            {
+                txtLog.Text = txtLog.Text.Substring(txtLog.Text.Length - MaxLogLength);
+                txtLog.Text = txtLog.Text.Substring(txtLog.Text.IndexOf('\n') + 1);
+            }
+
+            logViewer.ScrollToBottom();
+        }
+
+        private void OnSystemEventsOnSessionSwitch(object sender, SessionSwitchEventArgs args)
 		{
 			if (args.Reason == SessionSwitchReason.SessionLock)
 			{
-				Debug.WriteLine("Station Locked");
+			    Logger.Debug("Station Locked");
 				CurrentState.SystemLocked = true;
 			}
 			else if (args.Reason == SessionSwitchReason.SessionUnlock)
 			{
-				Debug.WriteLine("Station Unlocked");
+			    Logger.Debug("Station Unlocked");
 				CurrentState.SystemLocked = false;
 				if (CurrentState.ChangeDetected)
 				{
@@ -105,14 +143,18 @@ namespace WindowPositionReset
 			}
 		}
 
-		private void OnStateChanged(object sender, EventArgs eventArgs)
-		{
-			mynotifyicon.Visible = true;
-			mynotifyicon.BalloonTipText = "Monitoring window positions";
-			mynotifyicon.ShowBalloonTip(500);
+	    private void OnStateChanged(object sender, EventArgs eventArgs)
+	    {
+	        if (this.WindowState == WindowState.Minimized)
+	        {
+	            mynotifyicon.Visible = true;
+	        
+	            mynotifyicon.BalloonTipText = "Monitoring window positions";
+	            mynotifyicon.ShowBalloonTip(500);
 
-			this.Hide();
-		}
+	            this.Hide();
+	        }
+	    }
 
 		private void OnClosed(object sender, EventArgs eventArgs)
 		{
@@ -124,7 +166,7 @@ namespace WindowPositionReset
 	    private void SystemEvents_DisplaySettingsChanged(object sender, EventArgs e)
 	    {
 	        CurrentState.ChangeDetected = true;
-	        Debug.WriteLine("Display Settings Changed");
+	        Logger.Debug("Display Settings Changed");
 
             _restoreTimer.Stop();
 	        _restoreTimer.Start();
@@ -133,7 +175,7 @@ namespace WindowPositionReset
 		private void SystemEvents_DisplaySettingsChanging(object sender, EventArgs e)
 		{
 		    CurrentState.ChangeDetected = true;
-			Debug.WriteLine("Display Settings Changing");
+		    Logger.Debug("Display Settings Changing");
 		}
 
 		private void TimerOnTick(object sender, EventArgs eventArgs)
@@ -145,19 +187,21 @@ namespace WindowPositionReset
 		{
             var config = new ScreenConfiguration(Screen.AllScreens);
 
-			Debug.WriteLine("Screen config: " + config);
+		    Logger.Debug("Screen config: " + config);
 
 			return config;
 		}
 
 		private void RecordPositions()
 		{
+            Logger.Debug($"Timer tick: Locked: {CurrentState.SystemLocked} ChangeDetected: {CurrentState.ChangeDetected}");
+
+		    if (CurrentState.SystemLocked || CurrentState.ChangeDetected)
+		        return;
+
 			lock (syncLock)
 			{
-				if (CurrentState.SystemLocked || CurrentState.ChangeDetected)
-					return;
-
-				Debug.WriteLine("Recording Positions");
+			    Logger.Debug("Recording Positions");
 				var windowPositions = new Dictionary<IntPtr, WindowPlacement>();
 
 				var currentConfig = GetCurrentScreenConfig();
@@ -171,7 +215,7 @@ namespace WindowPositionReset
 						!string.IsNullOrEmpty(window.Title) &&
 						window.IsVisible)
 					{
-						Debug.WriteLine("Saving position of " + window.Title + " as " + window.WindowPlacement);
+					    Logger.Debug("Saving position of " + window.Title + " as " + window.WindowPlacement);
 
 						windowPositions[window.Hwnd] = state;
 					}
@@ -183,7 +227,7 @@ namespace WindowPositionReset
 				if (newConfig.Equals(currentConfig))
 					resolutionDictionary[currentConfig] = windowPositions;
 				else
-					Debug.WriteLine("Resolution changed mid-record, dropping record");
+				    Logger.Debug("Resolution changed mid-record, dropping record");
 			}
 		}
 
@@ -193,12 +237,12 @@ namespace WindowPositionReset
 
 		    if (!resolutionDictionary.ContainsKey(newTuple))
             {
-                Debug.WriteLine("New Resolution not found, ignoring change");
+                Logger.Debug("New Resolution not found, ignoring change");
                 CurrentState.ChangeDetected = false;
 		        return;
 		    }
 
-			Debug.WriteLine("Restoring Positions");
+		    Logger.Debug("Restoring Positions");
 
 			lock (syncLock)
 			{
@@ -230,7 +274,7 @@ namespace WindowPositionReset
 						if (windowPositions.ContainsKey(window.Hwnd))
 						{
 						    var newState = windowPositions[window.Hwnd];
-							Debug.WriteLine("Restoring position of " + window.Title + " to " + newState);
+						    Logger.Debug("Restoring position of " + window.Title + " to " + newState);
 
 						    var tempState = newState.Clone();
 
