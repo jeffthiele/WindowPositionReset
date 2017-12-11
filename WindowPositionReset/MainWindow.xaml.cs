@@ -10,6 +10,7 @@ using System.Windows.Forms;
 using System.Windows.Threading;
 using System.Drawing;
 using System.IO;
+using System.Text;
 using log4net;
 using log4net.Config;
 using Microsoft.Win32;
@@ -46,6 +47,7 @@ namespace WindowPositionReset
 
 		    XmlConfigurator.Configure();
 
+#if DEBUG
 		    foreach (var appender in LogManager.GetRepository().GetAppenders())
 		    {
 		        if (appender is EventTriggerAppender eta)
@@ -53,6 +55,7 @@ namespace WindowPositionReset
 		            eta.OnLogEvent += Appender_OnLogEvent;
 		        }
 		    }
+#endif
 
 			InitializeComponent();
 			this.WindowState = System.Windows.WindowState.Minimized;
@@ -114,14 +117,15 @@ namespace WindowPositionReset
 
         private void Appender_OnLogEvent(object sender, string message)
         {
-            txtLog.Text += message;
+            var value = txtLog.Text + message;
             
-            if (txtLog.Text.Length > MaxLogLength)
+            if (value.Length > MaxLogLength)
             {
-                txtLog.Text = txtLog.Text.Substring(txtLog.Text.Length - MaxLogLength);
-                txtLog.Text = txtLog.Text.Substring(txtLog.Text.IndexOf('\n') + 1);
+                value = value.Substring(value.Length - MaxLogLength);
+                value = value.Substring(value.IndexOf('\n') + 1);
             }
 
+            txtLog.Text = value;
             logViewer.ScrollToBottom();
         }
 
